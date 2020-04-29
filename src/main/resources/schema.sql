@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS task (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    description VARCHAR(255),
+    completed BIT(1)
+)  ENGINE=INNODB;
