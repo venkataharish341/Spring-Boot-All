@@ -1,14 +1,22 @@
 package com.learn2earn.todo.controllers;
 
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
 import javax.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,14 +24,18 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.learn2earn.todo.centralerrorhandling.ConflictException;
 import com.learn2earn.todo.centralerrorhandling.RecordNotFoundException;
 import com.learn2earn.todo.models.ToDo;
 import com.learn2earn.todo.models.View;
+import com.learn2earn.todo.services.RabbitSenderService;
 import com.learn2earn.todo.services.ToDoService;
 
 @RestController
@@ -32,7 +44,45 @@ public class ToDoController {
 	@Autowired
 	private ToDoService todoService;
 
+	@Autowired
+	private RabbitSenderService rabbitService;
+
+	private final static String EXTERNAL_FILE_PATH = "D:/";
+
 	//GET Mappings
+
+	/**
+	 * Downloads file from D:/{fileName} location.
+	 * @param username
+	 * @param fileName
+	 * @return
+	 * @throws IOException
+	 */
+	@GetMapping("/users/{username}/todos_download")
+	public ResponseEntity<Resource> downloadPDFResource(@PathVariable String username, @RequestParam String fileName) throws IOException {
+
+		List<ToDo> todos = todoService.getAllTodosForUser(username);
+
+		ObjectMapper Obj = new ObjectMapper();
+		// To pretty print JSON and conversion of Object to JSON.
+		String jsonStr = Obj.writerWithDefaultPrettyPrinter().writeValueAsString(todos);
+
+		// To write JSON string to a file.  
+		BufferedWriter writer = new BufferedWriter(new FileWriter(EXTERNAL_FILE_PATH + fileName));
+		writer.write(jsonStr);
+		writer.close();
+
+		// Converting that file to input stream and downloading it. 
+		File file = new File(EXTERNAL_FILE_PATH + fileName);
+		Resource inputStream = new InputStreamResource(new FileInputStream(file));
+
+		return ResponseEntity.ok()
+				.header("Content-Disposition", String.format("attachment; filename=\"" + file.getName() + "\""))
+				.contentType(MediaType.APPLICATION_OCTET_STREAM)
+				.contentLength((int)file.length())
+				.body(inputStream);
+
+	}
 
 	@GetMapping("/users")
 	public ResponseEntity<List<String>> getAllDistinctUsers() {
@@ -110,6 +160,9 @@ public class ToDoController {
 		}
 
 		ToDo createdTodo = todoService.saveTodo(todo);
+
+		//Sending to RabbitMQ which sends email via AWS SES.
+		rabbitService.sendForEmail(createdTodo);
 
 		HttpHeaders headers = new HttpHeaders();
 		headers.setLocation(UriComponentsBuilder.newInstance().path("/users/{username}/todos/{id}")
