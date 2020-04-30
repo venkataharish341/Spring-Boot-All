@@ -29,7 +29,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import com.fasterxml.jackson.annotation.JsonView;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.learn2earn.todo.centralerrorhandling.ConflictException;
 import com.learn2earn.todo.centralerrorhandling.RecordNotFoundException;
